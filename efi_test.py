@@ -13,10 +13,13 @@ RHT_DB = "/home/gaurabd/efi_test/server_db_4.db"
     
 app = Flask(__name__)
 app.secret_key = "69001231gaurabd"
-app.debug=True #enable some debugging
-app.wsgi_app = DebuggedApplication(app.wsgi_app, True) #make this a debuggable application
-app.config["SERVER_NAME"] = "efpi-21.mit.edu"
-app.config["APPLICATION_ROOT"] = "/efi_test"
+
+#enable some debugging
+app.debug=True 
+app.wsgi_app = DebuggedApplication(app.wsgi_app, True)    
+
+# app.config["SERVER_NAME"] = "efpi-21.mit.edu"
+# app.config["APPLICATION_ROOT"] = "/efi_test"
 
 @app.route("/")
 def index():
