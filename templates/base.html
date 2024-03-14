@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Aclimatik!</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" />
+    <style type="text/css">
+        h3 {
+            font-size: 90px;
+            white-space: nowrap;
+            overflow: hidden;
+            animation: typewriter 1.8s steps(10) infinite alternate,
+                blink 800ms steps(10) infinite normal;
+            border-right: 5px solid black;
+        }
+ 
+        @keyframes typewriter {
+            from {
+                width: 0%;
+            }
+ 
+            to {
+                width: 15%;
+            }
+        }
+ 
+        @keyframes blink {
+            from {
+                border-color: black;
+            }
+ 
+            to {
+                border-color: transparent;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <section class="hero is-primary is-fullheight">
+
+        <div class="hero-head">
+            <nav class="navbar">
+                <div class="container">
+                    <div id="navbarMenuHeroA" class="navbar-menu">
+                        <div class="navbar-end">
+                            <a href="/efi_test" class="navbar-item">
+                                Home
+                            </a>
+                            {% if "logged_in" not in session %}
+                                <a href="/efi_test/login" class="navbar-item">
+                                    Login
+                                </a>
+                            {% endif %}
+                            {% if "logged_in" in session %}
+                                <div class="navbar-item has-dropdown is-hoverable">
+                                    <a class="navbar-link">
+                                    Plots
+                                    </a>
+                            
+                                    <div class="navbar-dropdown">
+                                    <a class="navbar-item has-text-dark" href="/efi_test/temp_plot">
+                                        Temperature
+                                    </a>
+                                    <a class="navbar-item has-text-dark" href="/efi_test/humidity_plot">
+                                        Humidity
+                                    </a>
+                                    <a class="navbar-item has-text-dark" href="/efi_test/soc_plot">
+                                        SoC
+                                    </a>
+                                    </div>
+                                </div>
+                                <a href="/efi_test/logout" class="navbar-item">
+                                    Logout
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </div>
+
+        <div class="hero-body">
+            <div class="container has-text-centered">
+               {% block content %}
+               {% endblock %}
+            </div>
+        </div>
+    </section>
+</body>
+
+</html>

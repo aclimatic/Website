@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="column is-4 is-offset-4">
+    <h2 class="title">Login</h2>
+    <div class="box">
+        <form method="POST" action="/efi_test/login">
+            <div class="field">
+                <div class="control">
+                    <input class="input is-large" type="username" name="username" placeholder="Your Username" autofocus="">
+                </div>
+            </div>
+
+            <div class="field">
+                <div class="control">
+                    <input class="input is-large" type="password" name="password" placeholder="Your Password">
+                </div>
+            </div>
+            <button class="button is-block is-info is-large is-fullwidth">Login</button>
+            {% if error %}
+                <div class="has-text-danger"> {{ error }} </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}
