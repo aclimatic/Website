@@ -47,11 +47,11 @@
                 <div class="container">
                     <div id="navbarMenuHeroA" class="navbar-menu">
                         <div class="navbar-end">
-                            <a href="/efi_test" class="navbar-item">
+                            <a href="/" class="navbar-item">
                                 Home
                             </a>
                             {% if "logged_in" not in session %}
-                                <a href="/efi_test/login" class="navbar-item">
+                                <a href="/login" class="navbar-item">
                                     Login
                                 </a>
                             {% endif %}
@@ -62,18 +62,18 @@
                                     </a>
                             
                                     <div class="navbar-dropdown">
-                                    <a class="navbar-item has-text-dark" href="/efi_test/temp_plot">
+                                    <a class="navbar-item has-text-dark" href="/temp_plot">
                                         Temperature
                                     </a>
-                                    <a class="navbar-item has-text-dark" href="/efi_test/humidity_plot">
+                                    <a class="navbar-item has-text-dark" href="/humidity_plot">
                                         Humidity
                                     </a>
-                                    <a class="navbar-item has-text-dark" href="/efi_test/soc_plot">
+                                    <a class="navbar-item has-text-dark" href="/soc_plot">
                                         SoC
                                     </a>
                                     </div>
                                 </div>
-                                <a href="/efi_test/logout" class="navbar-item">
+                                <a href="/logout" class="navbar-item">
                                     Logout
                                 </a>
                             {% endif %}

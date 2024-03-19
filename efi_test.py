@@ -13,13 +13,9 @@ RHT_DB = "/home/gaurabd/efi_test/server_db_4.db"
     
 app = Flask(__name__)
 app.secret_key = "69001231gaurabd"
+app.debug=True #enable some debugging
+app.wsgi_app = DebuggedApplication(app.wsgi_app, True) #make this a debuggable application
 
-#enable some debugging
-app.debug=True 
-app.wsgi_app = DebuggedApplication(app.wsgi_app, True)    
-
-# app.config["SERVER_NAME"] = "efpi-21.mit.edu"
-# app.config["APPLICATION_ROOT"] = "/efi_test"
 
 @app.route("/")
 def index():
@@ -33,13 +29,13 @@ def login():
             error = 'Invalid Credentials. Please try again.'
         else:
             session["logged_in"] = True
-            return redirect('/efi_test')
+            return redirect('/')
     return render_template('login.html', error=error)
 
 @app.route("/logout")
 def logout():
     session.pop("logged_in", None)
-    return redirect("/efi_test")
+    return redirect("/")
 
 def compute_heat_index(RH, T): 
     HI = -42.379 + 2.04901523*T + 10.14333127*RH - 0.22475541*T*RH - 0.00683783*T*T - 0.05481717*RH*RH + 0.00122874*T*T*RH + 0.00085282*T*RH*RH - 0.00000199*T*T*RH*RH 
