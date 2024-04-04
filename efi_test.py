@@ -1,5 +1,6 @@
 from flask import Flask, request, render_template, redirect, url_for, session, send_file
 import random
+import requests
 import sqlite3, datetime
 # import pandas as pd
 import pandas as pd
@@ -15,8 +16,20 @@ app = Flask(__name__)
 app.secret_key = "69001231gaurabd"
 app.debug=True #enable some debugging
 app.wsgi_app = DebuggedApplication(app.wsgi_app, True) #make this a debuggable application
-# app.config["SERVER_NAME"] = "efpi-21.mit.edu"
-# app.config["APPLICATION_ROOT"] = "/"
+
+
+def compute_heat_index(RH, T): 
+    HI = -42.379 + 2.04901523*T + 10.14333127*RH - 0.22475541*T*RH - 0.00683783*T*T - 0.05481717*RH*RH + 0.00122874*T*T*RH + 0.00085282*T*RH*RH - 0.00000199*T*T*RH*RH 
+    return round(HI)
+
+def get_temperature_api(latitude, longitude):
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={str(latitude)}&longitude={str(longitude)}&temperature_unit=fahrenheit&current=temperature_2m"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        return float(data['current']['temperature_2m'])
+    else:
+        return 'None'
 
 @app.route("/")
 def index():
@@ -37,10 +50,6 @@ def login():
 def logout():
     session.pop("logged_in", None)
     return redirect("/")
-
-def compute_heat_index(RH, T): 
-    HI = -42.379 + 2.04901523*T + 10.14333127*RH - 0.22475541*T*RH - 0.00683783*T*T - 0.05481717*RH*RH + 0.00122874*T*T*RH + 0.00085282*T*RH*RH - 0.00000199*T*T*RH*RH 
-    return round(HI)
 
 @app.route("/heat_index", methods=['POST','GET'])
 def heat_index_function():
@@ -122,7 +131,7 @@ def plotter1():
         temp_obj["Curr Sensor Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['t'])
         temp_obj["Minimum Temperature"] = min(df['t'])
         temp_obj["Maximum Temperature"] = max(df['t'])
-        temp_obj["Reported Temperature"] = 54
+        temp_obj["Reported Temperature"] = get_temperature_api('42.360001', '-71.092003')
         return render_template('plot.html', graphJSON=graphJSON, title="Temperature Data", temp_obj=temp_obj, dates=str(datetime.date.today()))
     else:
         return redirect('login')
