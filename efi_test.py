@@ -165,6 +165,35 @@ def send_info():
 def profile():
     return render_template('profile.html')
 
+@app.route("/occupancy", methods=['POST','GET'])
+def occupancy_function():
+    args = request.args
+    if request.method == "POST":
+        try:
+            bytes = str(args['bytes'])
+            device = int(args['device']) if 'device' in args else 0
+            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+            c = conn.cursor()  # move cursor into database (allows us to execute commands)
+            c.execute('''CREATE TABLE IF NOT EXISTS occupy_table (time timestamp, device real, bytes text);''') 
+            c.execute('''INSERT into occupy_table VALUES (?,?,?);''', (datetime.datetime.now(),device,bytes,))
+            conn.commit()
+            conn.close()
+            return 'posted!'
+        except Exception as e:
+            return str(e)
+    else:
+        try:
+            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+            c = conn.cursor()  # move cursor into database (allows us to execute commands)
+            c.execute('''CREATE TABLE IF NOT EXISTS occupy_table (time timestamp, device real, bytes text);''') 
+            prev_data = c.execute('''SELECT time, device, bytes FROM occupy_table ORDER BY rowid DESC;''').fetchall()
+
+            outs = ""
+            for t in prev_data:
+                outs += f"time: {t[0]}, device: {t[1]}, bytes: {t[2]}! <br>"
+            return outs
+        except Exception as e:
+            return 'Error: ' +str(e)
     
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
