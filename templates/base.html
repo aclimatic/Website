@@ -36,6 +36,21 @@
                 border-color: transparent;
             }
         }
+
+        .coolhover {
+            background-color: white;
+            color:black;
+            transition: 0.3s;
+            border: none;
+            font-size: large;
+        }
+
+        .coolhover:hover {
+            background-color: blue;
+            opacity: 0.5;
+            color: white;
+        }
+
     </style>
 </head>
 
@@ -56,9 +71,12 @@
                                 </a>
                             {% endif %}
                             {% if "logged_in" in session %}
+                                <a href="/profile" class="navbar-item">
+                                    Profile
+                                </a>
                                 <div class="navbar-item has-dropdown is-hoverable">
                                     <a class="navbar-link">
-                                    Plots
+                                    Data
                                     </a>
                             
                                     <div class="navbar-dropdown">

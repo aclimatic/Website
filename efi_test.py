@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, session
+from flask import Flask, request, render_template, redirect, url_for, session, send_file
 import random
 import sqlite3, datetime
 # import pandas as pd
@@ -9,13 +9,14 @@ import json
 from werkzeug.debug import DebuggedApplication #bring in debugging library
 
 
-RHT_DB = "/home/gaurabd/efi_test/server_db_4.db"
+RHT_DB = "server_db_4.db"
     
 app = Flask(__name__)
 app.secret_key = "69001231gaurabd"
 app.debug=True #enable some debugging
 app.wsgi_app = DebuggedApplication(app.wsgi_app, True) #make this a debuggable application
-
+# app.config["SERVER_NAME"] = "efpi-21.mit.edu"
+# app.config["APPLICATION_ROOT"] = "/"
 
 @app.route("/")
 def index():
@@ -79,11 +80,6 @@ def heat_index_function():
         except Exception as e:
             return 'lol' +str(e)
 
-@app.route("/template_test")
-def tt():
-    now = datetime.datetime.now()
-    return render_template('template.html', time_stamp = now)
-
 @app.route('/humidity_plot')
 def plotter2():
     if ("logged_in" not in session or not session["logged_in"]):
@@ -100,7 +96,12 @@ def plotter2():
     fig = px.line(df, x='Datetime', y='rh', title="Change of Humidity with Time")
     # turn into json object for export and embedding in template:
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('plot.html', graphJSON=graphJSON, title="Relative Humidity Plot")
+    humidity_obj = dict()
+    humidity_obj["Curr Sensor Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['rh'])
+    humidity_obj["Minimum Humidity"] = min(df['rh'])
+    humidity_obj["Maximum Humidity"] = max(df['rh'])
+    humidity_obj["Reported Humiidty"] = 78
+    return render_template('plot.html', graphJSON=graphJSON, title="Relative Humidity Data", dates=str(datetime.date.today()))
 
 @app.route('/temp_plot')
 def plotter1():
@@ -117,7 +118,12 @@ def plotter1():
         fig = px.line(df, x='Datetime', y='t', title="Change of Temperature with Time")
         # turn into json object for export and embedding in template:
         graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-        return render_template('plot.html', graphJSON=graphJSON, title="Temperature Plot")
+        temp_obj = dict()
+        temp_obj["Curr Sensor Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['t'])
+        temp_obj["Minimum Temperature"] = min(df['t'])
+        temp_obj["Maximum Temperature"] = max(df['t'])
+        temp_obj["Reported Temperature"] = 54
+        return render_template('plot.html', graphJSON=graphJSON, title="Temperature Data", temp_obj=temp_obj, dates=str(datetime.date.today()))
     else:
         return redirect('login')
 
@@ -137,9 +143,18 @@ def soc_plotter():
     fig = px.line(df, x='Datetime', y='soc', title="Change of soc with Time")
     # turn into json object for export and embedding in template:
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('plot.html', graphJSON=graphJSON, title="Soc Plot")
+    temp_obj = dict()
+    temp_obj["Curr Battery Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['soc'])
+    temp_obj["Battery Status"] = "Good"
+    return render_template('plot.html', graphJSON=graphJSON, title="Soc Data", temp_obj=temp_obj, dates=str(datetime.date.today()))
 
+@app.route('/get_data', methods=['POST'])
+def send_info():
+    return send_file(RHT_DB)
 
+@app.route('/profile')
+def profile():
+    return render_template('profile.html')
 
     
 if __name__ == "__main__":

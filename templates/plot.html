@@ -1,11 +1,37 @@
 {% extends "base.html" %}
 
 {% block content %}
-<p class="is-size-2">{{ title }}!</h1>
-<div id='chart' class='chart'”></div>
-<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
-<script type='text/javascript'>
-  var graphs = {{graphJSON | safe}};
-  Plotly.plot('chart',graphs,{});
-</script>
+<h1><p class="is-size-2">{{ title }}</h1>
+<div class="column is-full-size">
+  <div class="box has-text-black">
+    <h1 class="title has-text-black">Dashboard for {{ dates }}</h1>
+    <div class="columns">
+      {% for dict_item in temp_obj %}
+        
+      <div class="column">
+        <div class="coolhover">
+          <center>
+            <h1><b>{{ dict_item }}</b></h1>
+            {{ temp_obj[dict_item] }}
+          </center>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<div id='chart' class='chart'”>
+  <script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+    <script type='text/javascript'>
+      var graphs = {{graphJSON | safe}};
+      Plotly.plot('chart',graphs,{});
+    </script>
+</div>
+
+<div class="column">
+<form method="POST" action="/get_data">
+  <center><button class="button is-block is-size-5">Download Data!</button></center>
+</form>
+</div>
+
 {% endblock %}
