@@ -9,7 +9,8 @@ import plotly.express as px
 import json
 from werkzeug.debug import DebuggedApplication #bring in debugging library
 
-
+# SERVER CODE!
+POST_FREQ = 60
 RHT_DB = "server_db_4.db"
     
 app = Flask(__name__)
@@ -44,7 +45,7 @@ def login():
         else:
             session["logged_in"] = True
             return redirect('/')
-    return render_template('login.html', error=error)
+    return render_template('login.html', error=error)    
 
 @app.route("/logout")
 def logout():
@@ -163,7 +164,8 @@ def send_info():
 
 @app.route('/profile')
 def profile():
-    return render_template('profile.html')
+    devices = [{'id': 0, 'name': 'Stata'}, {'id': 1, 'name': 'Stud'}]
+    return render_template('profile.html', devices=devices)
 
 @app.route("/occupancy", methods=['POST','GET'])
 def occupancy_function():
@@ -195,5 +197,80 @@ def occupancy_function():
         except Exception as e:
             return 'Error: ' +str(e)
     
+@app.route("/post_test", methods=["POST", "GET"])
+def testing():
+    if request.method == 'POST':
+        json_dict = request.get_json()
+        temp_arr = json_dict["temp"]
+        humidity_arr = json_dict["humidity"]
+        lux_arr = json_dict["lux"]
+        current_time = datetime.datetime.now()
+
+        conn = sqlite3.connect(RHT_DB)  
+        c = conn.cursor()  
+        c.execute('''CREATE TABLE IF NOT EXISTS test_temp_table (time timestamp, temp real, humidity real);''')
+        for i in range(len(temp_arr)):
+            c.execute('''INSERT into test_temp_table VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)) ,temp_arr[i],humidity_arr[i],))
+        conn.commit()
+        conn.close()
+        return datetime.datetime.now().hour
+    else:
+        try:
+            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+            c = conn.cursor()  # move cursor into database (allows us to execute commands)
+            c.execute('''CREATE TABLE IF NOT EXISTS test_temp_table (time timestamp, temp real, humidity real);''') 
+            prev_data = c.execute('''SELECT time, temp, humidity FROM test_temp_table ORDER BY rowid DESC;''').fetchall()
+
+            outs = "Existing Test Data: <br>"
+            for t in prev_data:
+                outs += f"time: {t[0]}, temp: {t[1]}, humidity: {t[2]}! <br>"
+            return outs
+        except Exception as e:
+            return 'Error: ' +str(e)
+
+
+@app.route("/posty", methods=["POST", "GET"])
+def alternate_testing():
+    if request.method == 'POST':
+        try:
+            json_dict = request.get_json()
+            device_id = json_dict["id"]
+            temp_arr = json_dict["temp"]
+            humidity_arr = json_dict["humidity"]
+            lux_arr = json_dict["lux"]
+            current_time = datetime.datetime.now()
+
+            conn = sqlite3.connect(RHT_DB)  
+            c = conn.cursor()  
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table (time timestamp, device real, temp real, humidity real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table (time timestamp, device real, lux real);''')
+            for i in range(len(temp_arr)):
+                c.execute('''INSERT into test_rht_table VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)), device_id, temp_arr[i], humidity_arr[i],))
+            for i in range(len(lux_arr)):
+                c.execute('''INSERT into test_lux_table VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(lux_arr)), device_id, lux_arr[i]))
+            conn.commit()
+            conn.close()
+            return str(datetime.datetime.now().hour)
+        except Exception as error:
+            return error
+    else:
+        try:
+            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+            c = conn.cursor()  # move cursor into database (allows us to execute commands)
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table (time timestamp, device real, temp real, humidity real);''') 
+            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table (time timestamp, device real, lux real);''') 
+            prev_temp_data = c.execute('''SELECT time, device, temp, humidity FROM test_rht_table ORDER BY rowid DESC;''').fetchall()
+            prev_lux_data = c.execute('''SELECT time, device, lux FROM test_lux_table ORDER BY rowid DESC;''').fetchall()
+            outs = "Existing Temp Data: <br>"
+            for t in prev_temp_data:
+                outs += f"time: {t[0]}, device: {t[1]}, temp: {t[2]}, humidity: {t[3]}! <br>"
+            outs += "Existing Lux Data: <br>"
+            for data in prev_lux_data:
+                outs += f"time: {t[0]}, device: {t[1]}, lux: {t[2]}! <br>"
+            return outs
+        except Exception as e:
+            return 'Error: ' +str(e)
+
+
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
