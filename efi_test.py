@@ -271,6 +271,67 @@ def alternate_testing():
         except Exception as e:
             return 'Error: ' +str(e)
 
+@app.route("/post_test2", methods=["POST", "GET"])
+def testing2():
+    if request.method == 'POST':
+        try:
+            json_dict = request.get_json()
+            device_id = json_dict["id"]
+            temp_arr = json_dict["temp"]
+            humidity_arr = json_dict["humidity"]
+            lux_arr = json_dict["lux"]
+            occupancy_arr = json_dict["occupancy"]
+            pressure_arr = json_dict["pressure"]
+            surface_arr = json_dict["surface"]
+            current_time = datetime.datetime.now()
+
+            conn = sqlite3.connect(RHT_DB)  
+            c = conn.cursor()  
+            c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_pressure_table2 (time timestamp, device real, pressure real);''')
+            for i in range(len(occupancy_arr)):
+                c.execute('''INSERT into test_occupancy_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(occupancy_arr)), device_id, occupancy_arr[i]))
+            for i in range(len(temp_arr)):
+                c.execute('''INSERT into test_rht_table2 VALUES (?,?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)), device_id, temp_arr[i], humidity_arr[i], surface_arr[i]))
+            for i in range(len(lux_arr)):
+                c.execute('''INSERT into test_lux_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(lux_arr)), device_id, lux_arr[i]))
+            for i in range(len(pressure_arr)):
+                c.execute('''INSERT into test_pressure_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(pressure_arr)), device_id, pressure_arr[i]))
+            conn.commit()
+            conn.close()
+            return str(datetime.datetime.now().hour)
+        except Exception as error:
+            return error
+    else:
+        try:
+            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+            c = conn.cursor()  # move cursor into database (allows us to execute commands)
+            c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_pressure_table2 (time timestamp, device real, pressure real);''')
+            prev_occupancy_data = c.execute('''SELECT time, device, occupancy FROM test_occupancy_table2 ORDER BY rowid DESC;''').fetchall()
+            prev_temp_data = c.execute('''SELECT time, device, temp, humidity, surface FROM test_rht_table2 ORDER BY rowid DESC;''').fetchall()
+            prev_lux_data = c.execute('''SELECT time, device, lux FROM test_lux_table2 ORDER BY rowid DESC;''').fetchall()
+            prev_pressure_data = c.execute('''SELECT time, device, pressure FROM test_pressure_table2 ORDER BY rowid DESC;''').fetchall()
+            outs = "Existing Occupancy Data: <br>"
+            for t in prev_occupancy_data:
+                outs += f"time: {t[0]}, device: {t[1]}, occupancy: {t[2]}! <br>"
+            outs += "Existing Temp Data: <br>"
+            for t in prev_temp_data:
+                outs += f"time: {t[0]}, device: {t[1]}, temp: {t[2]}, humidity: {t[3]}, surface: {t[4]}! <br>"
+            outs += "Existing Lux Data: <br>"
+            for data in prev_lux_data:
+                outs += f"time: {t[0]}, device: {t[1]}, lux: {t[2]}! <br>"
+            outs += "Existing Pressure Data: <br>"
+            for data in prev_pressure_data:
+                outs += f"time: {t[0]}, device: {t[1]}, pressure: {t[2]}! <br>"
+            return outs
+        except Exception as e:
+            return 'Error: ' +str(e)
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
