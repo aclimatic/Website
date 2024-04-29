@@ -3,9 +3,94 @@
 {% block content %}
 <h2 class="title">Welcome Admin!</h2>
 
+{% for device in devices %}
+    <div class="column is-full-size">
+        <div class="box has-text-black">
+            <div class="columns">
+                <div class="column is-four-fifths" id="device-{{ device.id }}" style="background-color: rgba(204, 65, 83, 0.582)">
+                    <h1 class="title has-text-black has-text-left">Dashboard for {{ device.name }} (Device ID: {{ device.id }})</h1>
+                </div>
+                <div class="column">
+                    
+                </div>
+                <div class="column">
+                    <center><button class="button is-block is-info is-large" onclick="openForm(event, {{ device.id }})" data-target="#form-{{ device.id }}">Edit</button></center>
+                    <div class="form-popup" id="form-{{ device.id }}">
+                        <form action="{{url_for('change_device_name', device_id=device.id)}}" class="form-container" method="POST">
+                            <label for="Task_edit"><b>Edit Name</b></label>
+                            <input type="text" value="{{ device.name }}" name="device_name" required>
+                            <button type="submit" class="button">Edit</button>
+                            <button type="button" class="button" onclick="closeForm(event, {{ device.id }})" data-dismiss=".form-popup">Close</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="column">
+                    <form method="POST" action="{{url_for('delete_device', device_id=device.id)}}">
+                        <button class="button is-block is-info is-large">Delete</button>
+                    </form>
+                </div>
+            </div>
+        <br>
+
+        <div class="columns">
+            <div class="column coolhover">
+                <center>
+                    Temperature
+                </center>
+            </div>
+            <div class="column coolhover">
+                <center>
+                    Humidity
+                </center>
+            </div>
+            <div class="column coolhover">
+                <center>
+                    Pressure
+                </center>
+            </div>
+            <div class="column coolhover">
+                <center>
+                    Occupancy
+                </center>
+            </div>
+            <div class="column coolhover">
+                <center>
+                    Battery Status
+                </center>
+            </div>
+
+        </div>
+        </div>
+    </div>
+{% endfor %}
+  
 <br>
-<a class="button is-link is-outlined" href="/temp_plot"> Temperature Data </a>
-<a class="button is-link is-outlined" href="/humidity_plot"> Humidity Data </a>
-<a class="button is-link is-outlined" href="/soc_plot"> Battery Data </a>
-<a class="button is-link is-outlined" href="/"> Add Users </a>
+
+<center>
+    <button class="button is-block is-info is-large" onclick="openForm(event, {{ -1 }})" data-target="#form-add">Add New Devices!</button>
+    <br>
+    <br>
+    <div class="form-popup" id="form-add">
+        <div class="column is-three-fifths">
+            <div class="box">
+                <form action="{{url_for('add_device')}}" class="form-container" method="POST">
+                    <div class="field">
+                        <div class="control">
+                            <input class="input is-large" type="username" name="device_id" placeholder="Device ID (Ask Admin for more information)" autofocus="">
+                        </div>
+                    </div>
+        
+                    <div class="field">
+                        <div class="control">
+                            <input class="input is-large" type="username" name="device_name" placeholder="Device Name">
+                        </div>
+                    </div>
+                    <button type="submit" class="button">Add</button>
+                    <button type="button" class="button" onclick="closeForm(event, {{ -1 }})" data-dismiss=".form-popup">Close</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</center>
+
 {% endblock %}

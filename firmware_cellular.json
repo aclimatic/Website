@@ -1,0 +1,5 @@
+{
+    "type": "esp32-fota-http",
+    "version": "1",
+    "url": "http://efpi-9.mit.edu/firmware_cellular.bin"
+}

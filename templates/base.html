@@ -50,8 +50,31 @@
             opacity: 0.5;
             color: white;
         }
-
+        
+        .form-popup {
+            display: none;
+        }
     </style>
+    <script>
+        function openForm(event, deviceId) {
+            const target = event.target.dataset.target;
+            const elem = document.querySelector(target);
+            elem && (elem.style.display = 'block');
+            console.log('clicked');
+            if (deviceId > -1) {
+                document.getElementById("device-" + deviceId).className = "column is-three-fifths";
+            }
+          }
+          
+          function closeForm(event, deviceId) {
+            const target = event.target.dataset.dismiss;
+            const elem = event.target.closest(target);
+            elem && (elem.style.display = 'none');
+            if (deviceId > -1) {
+                document.getElementById("device-" + deviceId).className = "column is-four-fifths";
+            }
+          }
+    </script>
 </head>
 
 <body>

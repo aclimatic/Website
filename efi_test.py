@@ -160,12 +160,76 @@ def soc_plotter():
 
 @app.route('/get_data', methods=['POST'])
 def send_info():
-    return send_file(RHT_DB)
+    data_type = request.form['data_type']
+    if data_type == 'Temperature Data':
+        conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+        c = conn.cursor()  # move cursor into database (allows us to execute commands)
+        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
+        df = pd.read_sql_query("SELECT timing, t FROM rht_table ORDER BY rowid DESC;", conn)
+        df.rename(columns={'timing': 'Datetime'}, inplace=True)
+        df.to_csv('temperature.csv')
+        return send_file('temperature.csv')
+    elif data_type == 'Humidity Data':
+        conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+        c = conn.cursor()  # move cursor into database (allows us to execute commands)
+        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
+        df = pd.read_sql_query("SELECT timing, soc FROM rht_table ORDER BY rowid DESC;", conn)
+        df.rename(columns={'timing': 'Datetime'}, inplace=True)
+        df.to_csv('humidity.csv')
+        return send_file('humidity.csv')
+    elif data_type == 'Soc Data':
+        conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+        c = conn.cursor()  # move cursor into database (allows us to execute commands)
+        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
+        df = pd.read_sql_query("SELECT timing, rh FROM rht_table ORDER BY rowid DESC;", conn)
+        df.rename(columns={'timing': 'Datetime'}, inplace=True)
+        df.to_csv('soc.csv')
+        return send_file('soc.csv')
+    else:
+        return "Oops, csv file does not exist"
+    
 
 @app.route('/profile')
 def profile():
-    devices = [{'id': 0, 'name': 'Stata'}, {'id': 1, 'name': 'Stud'}]
+    conn = sqlite3.connect(RHT_DB) 
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS device_test (id real, name text);''') 
+    prev_data = c.execute('''SELECT id, name FROM device_test ORDER BY rowid DESC;''').fetchall()
+    conn.close()
+    devices = [{'id': int(data[0]), 'name': data[1]} for data in prev_data]
     return render_template('profile.html', devices=devices)
+
+@app.route('/change_name', methods=['POST'])
+def change_device_name():
+    device_id = float(request.args['device_id'])
+    conn = sqlite3.connect(RHT_DB) 
+    c = conn.cursor()
+    c.execute('''UPDATE device_test SET name = ? WHERE id = ?;''', (request.form["device_name"], device_id,)) 
+    conn.commit()
+    conn.close()
+    return redirect('/profile')
+
+@app.route('/delete_device', methods=['POST'])
+def delete_device():
+    device_id = float(request.args['device_id'])
+    conn = sqlite3.connect(RHT_DB) 
+    c = conn.cursor()
+    c.execute('''DELETE FROM device_test WHERE id = ?;''', (device_id,)) 
+    conn.commit()
+    conn.close()
+    return redirect('/profile')
+
+@app.route('/add_device', methods=['POST'])
+def add_device():
+    device_name = request.form["device_name"]
+    device_id = float(request.form["device_id"])
+    conn = sqlite3.connect(RHT_DB) 
+    c = conn.cursor()
+    c.execute('''INSERT INTO device_test VALUES (?, ?);''', (device_id, device_name)) 
+    conn.commit()
+    conn.close()
+    return redirect('/profile')
+
 
 @app.route("/occupancy", methods=['POST','GET'])
 def occupancy_function():
@@ -201,9 +265,11 @@ def occupancy_function():
 def testing():
     if request.method == 'POST':
         json_dict = request.get_json()
+        id = json_dict["id"]
         temp_arr = json_dict["temp"]
         humidity_arr = json_dict["humidity"]
         lux_arr = json_dict["lux"]
+
         current_time = datetime.datetime.now()
 
         conn = sqlite3.connect(RHT_DB)  
@@ -245,7 +311,7 @@ def alternate_testing():
             c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table (time timestamp, device real, temp real, humidity real);''')
             c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table (time timestamp, device real, lux real);''')
             for i in range(len(temp_arr)):
-                c.execute('''INSERT into test_rht_table VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)), device_id, temp_arr[i], humidity_arr[i],))
+                c.execute('''INSERT into test_rht_table VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(temp_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)), device_id, temp_arr[i], humidity_arr[i],))
             for i in range(len(lux_arr)):
                 c.execute('''INSERT into test_lux_table VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(lux_arr)), device_id, lux_arr[i]))
             conn.commit()
@@ -265,7 +331,7 @@ def alternate_testing():
             for t in prev_temp_data:
                 outs += f"time: {t[0]}, device: {t[1]}, temp: {t[2]}, humidity: {t[3]}! <br>"
             outs += "Existing Lux Data: <br>"
-            for data in prev_lux_data:
+            for t in prev_lux_data:
                 outs += f"time: {t[0]}, device: {t[1]}, lux: {t[2]}! <br>"
             return outs
         except Exception as e:
@@ -284,7 +350,7 @@ def testing2():
             pressure_arr = json_dict["pressure"]
             surface_arr = json_dict["surface"]
             current_time = datetime.datetime.now()
-
+            ARR = []
             conn = sqlite3.connect(RHT_DB)  
             c = conn.cursor()  
             c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real);''')
@@ -292,16 +358,16 @@ def testing2():
             c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real);''')
             c.execute('''CREATE TABLE IF NOT EXISTS test_pressure_table2 (time timestamp, device real, pressure real);''')
             for i in range(len(occupancy_arr)):
-                c.execute('''INSERT into test_occupancy_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(occupancy_arr)), device_id, occupancy_arr[i]))
+                c.execute('''INSERT into test_occupancy_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(occupancy_arr)), device_id, occupancy_arr[i],))
             for i in range(len(temp_arr)):
-                c.execute('''INSERT into test_rht_table2 VALUES (?,?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)), device_id, temp_arr[i], humidity_arr[i], surface_arr[i]))
+                c.execute('''INSERT into test_rht_table2 VALUES (?,?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(temp_arr)), device_id, temp_arr[i], humidity_arr[i], surface_arr[i],))
             for i in range(len(lux_arr)):
-                c.execute('''INSERT into test_lux_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(lux_arr)), device_id, lux_arr[i]))
+                c.execute('''INSERT into test_lux_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(lux_arr)), device_id, lux_arr[i],))
             for i in range(len(pressure_arr)):
-                c.execute('''INSERT into test_pressure_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(pressure_arr)), device_id, pressure_arr[i]))
+                c.execute('''INSERT into test_pressure_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(pressure_arr)), device_id, pressure_arr[i],))
             conn.commit()
             conn.close()
-            return str(datetime.datetime.now().hour)
+            return str(datetime.datetime.now().hour) + str(', '.join([str(x) for x in ARR]))
         except Exception as error:
             return error
     else:
@@ -323,15 +389,30 @@ def testing2():
             for t in prev_temp_data:
                 outs += f"time: {t[0]}, device: {t[1]}, temp: {t[2]}, humidity: {t[3]}, surface: {t[4]}! <br>"
             outs += "Existing Lux Data: <br>"
-            for data in prev_lux_data:
+            for t in prev_lux_data:
                 outs += f"time: {t[0]}, device: {t[1]}, lux: {t[2]}! <br>"
             outs += "Existing Pressure Data: <br>"
-            for data in prev_pressure_data:
+            for t in prev_pressure_data:
                 outs += f"time: {t[0]}, device: {t[1]}, pressure: {t[2]}! <br>"
             return outs
         except Exception as e:
             return 'Error: ' +str(e)
 
+@app.route('/firmware.json', methods=['GET'])
+def send_firmware_json():
+    return send_file('firmware.json')
+
+@app.route('/firmware.bin', methods=['GET'])
+def send_firmware_binary():
+    return send_file('firmware.bin')
+
+@app.route('/firmware_cellular.json', methods=['GET'])
+def send_firmware_cellular_json():
+    return send_file('firmware_cellular.json')
+
+@app.route('/firmware_cellular.bin', methods=['GET'])
+def send_firmware_cellular_binary():
+    return send_file('firmware_cellular.bin')
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')

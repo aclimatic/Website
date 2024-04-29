@@ -1,3 +1,4 @@
 *.db
+*.csv
 efi_venv/
 __pycache__/
