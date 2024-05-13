@@ -6,6 +6,7 @@ import sqlite3, datetime
 import pandas as pd
 import plotly
 import plotly.express as px
+import plotly.graph_objects as go
 import json
 from werkzeug.debug import DebuggedApplication #bring in debugging library
 
@@ -18,6 +19,8 @@ app.secret_key = "69001231gaurabd"
 app.debug=True #enable some debugging
 app.wsgi_app = DebuggedApplication(app.wsgi_app, True) #make this a debuggable application
 
+def strip_time(time):
+    return datetime.datetime(time.year, time.month, time.day, time.hour, time.minute)
 
 def compute_heat_index(RH, T): 
     HI = -42.379 + 2.04901523*T + 10.14333127*RH - 0.22475541*T*RH - 0.00683783*T*T - 0.05481717*RH*RH + 0.00122874*T*T*RH + 0.00085282*T*RH*RH - 0.00000199*T*T*RH*RH 
@@ -40,11 +43,11 @@ def index():
 def login():
     error = None
     if request.method == 'POST':
-        if request.form['username'] != 'admin' or request.form['password'] != 'admin':
+        if request.form['username'] not in ['MIT', 'Miami'] or request.form['password'] != 'admin':
             error = 'Invalid Credentials. Please try again.'
         else:
-            session["logged_in"] = True
-            return redirect('/')
+            session["logged_in"] = request.form['username']
+            return redirect('/profile')
     return render_template('login.html', error=error)    
 
 @app.route("/logout")
@@ -52,159 +55,215 @@ def logout():
     session.pop("logged_in", None)
     return redirect("/")
 
-@app.route("/heat_index", methods=['POST','GET'])
-def heat_index_function():
-    args = request.args
-    if request.method == "POST":
-        try:
-            rh = float(args['rh'])
-            t = float(args['t'])
-            soc = float(args['soc'])
-            kerberos = args['kerberos']
-            if (kerberos != 'gaurabd'):
-                return "Sorry, Invalid Access!"
-            heat_index = round(compute_heat_index(rh,t))
-            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
-            c = conn.cursor()  # move cursor into database (allows us to execute commands)
-            c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''') #jodalyst test
-            c.execute('''INSERT into rht_table VALUES (?,?,?,?,?);''', (datetime.datetime.now(),rh,t,heat_index, soc))
-            conn.commit() # commit commands
-            conn.close() # close connection to database
-            return 'posted!'
-        except Exception as e:
-            return str(e)
-    else:
-        try:
-            time = float(args['time'])
-            kerberos = args['kerberos']
-            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
-            c = conn.cursor()  # move cursor into database (allows us to execute commands)
-            c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''') #jodalyst test
-            variable_minutes_ago = datetime.datetime.now() - datetime.timedelta(minutes = time)
-            prev_data = c.execute('''SELECT timing, rh, t, heat_index, soc FROM rht_table WHERE timing > ? ORDER BY rowid DESC;''', (variable_minutes_ago,)).fetchall()
-
-            outs = ""
-            for t in prev_data:
-                outs += f"time: {t[0]}, rh: {t[1]}, t: {t[2]}, heat_index: {t[3]}, soc: {t[4]}! <br>"
-            return outs
-        except Exception as e:
-            return 'lol' +str(e)
-
 @app.route('/humidity_plot')
 def plotter2():
-    if ("logged_in" not in session or not session["logged_in"]):
+    if ("logged_in" not in session):
         return redirect('login')
     try:
+        device_id = str(request.args["id"])
         conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
         c = conn.cursor()  # move cursor into database (allows us to execute commands)
-        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
-        df = pd.read_sql_query("SELECT timing, rh FROM rht_table ORDER BY rowid DESC;", conn)
-        df.rename(columns={'timing': 'Datetime'}, inplace=True)
+        c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real, device_id varchar(300));''')
+        df = pd.read_sql_query("SELECT time, humidity, temp FROM test_rht_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+        df.rename(columns={'time': 'Datetime'}, inplace=True)
+        df['Datetime'] = pd.to_datetime(df['Datetime'])
+        if df.shape[0] == 0:
+                return 'Not a valid device id :('
     except Exception as e:
         return str(e)
     #make a line plot using pandas:
-    fig = px.line(df, x='Datetime', y='rh', title="Change of Humidity with Time")
+    fig = px.line(df, x='Datetime', y='humidity', title="Change of Humidity with Time")
     # turn into json object for export and embedding in template:
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+    latest_humidity = min(df[df['Datetime'] == max(df['Datetime'])]['humidity'])
+    latest_temp = min(df[df['Datetime'] == max(df['Datetime'])]['temp'])
     humidity_obj = dict()
-    humidity_obj["Curr Sensor Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['rh'])
-    humidity_obj["Minimum Humidity"] = min(df['rh'])
-    humidity_obj["Maximum Humidity"] = max(df['rh'])
-    humidity_obj["Reported Humiidty"] = 78
-    return render_template('plot.html', graphJSON=graphJSON, title="Relative Humidity Data", dates=str(datetime.date.today()))
+    humidity_obj["Current Humidity (in %)"] = latest_humidity
+    humidity_obj["Minimum Humidity today (in %)"] = min(df['humidity'])
+    humidity_obj["Maximum Humidity today (in %)"] = max(df['humidity'])
+    humidity_obj["Current Heat Index"] = compute_heat_index(latest_humidity, latest_temp)
+    return render_template('plot.html', graphJSON=graphJSON, title="Relative Humidity Data", device_id=device_id, temp_obj=humidity_obj, dates=str(int((datetime.datetime.now() - max(df['Datetime'])).total_seconds()//60)))
 
 @app.route('/temp_plot')
 def plotter1():
-    if "logged_in" in session and session["logged_in"]:
+    if "logged_in" in session:
         try:
+            device_id = str(request.args["id"])
             conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
             c = conn.cursor()  # move cursor into database (allows us to execute commands)
-            c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
-            df = pd.read_sql_query("SELECT timing, t FROM rht_table ORDER BY rowid DESC;", conn)
-            df.rename(columns={'timing': 'Datetime'}, inplace=True)
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real, device_id varchar(300));''')
+            df = pd.read_sql_query("SELECT time, temp, surface FROM test_rht_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+            if df.shape[0] == 0:
+                return 'Not a valid device id :('
+            df.rename(columns={'time': 'Datetime'}, inplace=True)
+            df['Datetime'] = pd.to_datetime(df['Datetime'])
+            temp_df = df[df['temp'] > -49]
+            surface_df = df[df['surface'] > 0]
         except Exception as e:
             return str(e)
         #make a line plot using pandas:
-        fig = px.line(df, x='Datetime', y='t', title="Change of Temperature with Time")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=temp_df['Datetime'], y=temp_df['temp'], mode='lines', name="Air Temperature"))
+        fig.add_trace(go.Scatter(x=surface_df['Datetime'], y=surface_df['surface'], mode='lines', name="Surface Temperature"))
+        fig.update_xaxes(title_text="Datetime")
+        fig.update_yaxes(title_text="Temperature (in F)")
+        fig.update_layout(
+            title=dict(text="Air and Surface Temperature Plots", font=dict(size=30), automargin=True, yref='paper')
+        )
+        fig.update_yaxes()
         # turn into json object for export and embedding in template:
         graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
         temp_obj = dict()
-        temp_obj["Curr Sensor Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['t'])
-        temp_obj["Minimum Temperature"] = min(df['t'])
-        temp_obj["Maximum Temperature"] = max(df['t'])
-        temp_obj["Reported Temperature"] = get_temperature_api('42.360001', '-71.092003')
-        return render_template('plot.html', graphJSON=graphJSON, title="Temperature Data", temp_obj=temp_obj, dates=str(datetime.date.today()))
+
+        current_date = datetime.datetime.now().date()
+        df_curr_day = df[df['Datetime'].dt.date == current_date]
+        temp_obj["Current Air Temperature (in F)"] = min(df[df['Datetime'] == max(df['Datetime'])]['temp'])
+
+        if (surface_df.shape[0] != 0):
+            temp_obj["Current Surface Temperature (in F)"] = min(df[df['Datetime'] == max(df['Datetime'])]['surface'])
+        if df_curr_day.shape[0] != 0:
+            temp_obj["Minimum Temperature Reported Today (in F)"] = min(df_curr_day['temp'])
+            temp_obj["Maximum Temperature Reported Today (in F)"] = max(df_curr_day['temp'])
+        else:
+            temp_obj["Minimum Temperature Reported Today (in F)"] = '-'
+            temp_obj["Maximum Temperature Reported Today (in F)"] = '-'
+        if session["logged_in"] == 'MIT':
+            temp_obj["Local Temperature Forecasted (in F)"] = get_temperature_api(42.360001, -71.092003)
+        elif session["logged_in"] == 'Miami':
+            temp_obj["Local Temperature Forecasted (in F)"] = get_temperature_api(25.55, -80.6327)
+
+        return render_template('plot.html', graphJSON=graphJSON, title="Temperature Data", temp_obj=temp_obj, device_id=device_id, dates=str(int((datetime.datetime.now() - max(df['Datetime'])).total_seconds()//60)))
     else:
         return redirect('login')
 
-@app.route('/soc_plot')
-def soc_plotter():
-    if ("logged_in" not in session or not session["logged_in"]):
+
+@app.route('/lux_plot')
+def lux_plotter():
+    if ("logged_in" not in session):
         return redirect('login')
     try:
+        device_id = str(request.args["id"])
         conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
         c = conn.cursor()  # move cursor into database (allows us to execute commands)
-        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
-        df = pd.read_sql_query("SELECT timing, soc FROM rht_table ORDER BY rowid DESC;", conn)
-        df.rename(columns={'timing': 'Datetime'}, inplace=True)
+        c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real, device_id varchar(300));''')
+        df = pd.read_sql_query("SELECT time, lux FROM test_lux_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+        df.rename(columns={'time': 'Datetime'}, inplace=True)
+        df['Datetime'] = pd.to_datetime(df['Datetime'])
+        if df.shape[0] == 0:
+            return 'Not a valid device id :('
     except Exception as e:
         return str(e)
     #make a line plot using pandas:
-    fig = px.line(df, x='Datetime', y='soc', title="Change of soc with Time")
+    fig = px.line(df, x='Datetime', y='lux', title="Change of Lux with Time")
     # turn into json object for export and embedding in template:
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
-    temp_obj = dict()
-    temp_obj["Curr Battery Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['soc'])
-    temp_obj["Battery Status"] = "Good"
-    return render_template('plot.html', graphJSON=graphJSON, title="Soc Data", temp_obj=temp_obj, dates=str(datetime.date.today()))
+
+    current_date = datetime.datetime.now().date()
+    today_lux_readings = df[df['Datetime'].dt.date == current_date]
+    try:
+        highest_lux_datetime = min(today_lux_readings[today_lux_readings['lux'] == max(today_lux_readings['lux'])]['Datetime'])
+    except:
+        highest_lux_datetime = '-'
+    lux_obj = dict()
+    lux_obj["Current Lux Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['lux'])
+    lux_obj["Time of Maximum Sunlight today"] = str(highest_lux_datetime.hour) + ':' + str(highest_lux_datetime.minute) if highest_lux_datetime != '-' else '-'
+
+    return render_template('plot.html', graphJSON=graphJSON, title="Sunlight Lux Data", temp_obj=lux_obj, device_id=device_id, dates=str(int((datetime.datetime.now() - max(df['Datetime'])).total_seconds()//60)))
+
+@app.route('/occupancy_plot')
+def occupancy_plotter():
+    if ("logged_in" not in session):
+        return redirect('login')
+    try:
+        device_id = str(request.args["id"])
+        conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+        c = conn.cursor()  # move cursor into database (allows us to execute commands)
+        c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real, device_id varchar(300));''')
+        df = pd.read_sql_query("SELECT time, occupancy FROM test_occupancy_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+        df.rename(columns={'time': 'Datetime'}, inplace=True)
+        df['Datetime'] = pd.to_datetime(df['Datetime'])
+        if df.shape[0] == 0:
+            return 'Not a valid device id :('
+    except Exception as e:
+        return str(e)
+    #make a line plot using pandas:
+    fig = px.line(df, x='Datetime', y='occupancy', title="Number of People Near Device")
+    # turn into json object for export and embedding in template:
+    graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+    current_date = datetime.datetime.now().date()
+    today_occupancy_readings = df[df['Datetime'].dt.date == current_date]
+    try:
+        highest_occupancy_datetime = min(today_occupancy_readings[today_occupancy_readings['occupancy'] == max(today_occupancy_readings['occupancy'])]['Datetime'])
+    except:
+        highest_occupancy_datetime = '-'
+    occupancy_obj = dict()
+    occupancy_obj["Current Number of People"] = str(int(min(df[df['Datetime'] == max(df['Datetime'])]['occupancy'])))
+    occupancy_obj["Time of Highest Occupancy today"] = str(highest_occupancy_datetime.hour) + ':' + str(highest_occupancy_datetime.minute) if highest_occupancy_datetime != '-' else '-'
+    occupancy_obj["Number of People during Highest Occupancy"] = str(int(min(df[df['Datetime'] == highest_occupancy_datetime]['occupancy']))) if highest_occupancy_datetime != '-' else '-'
+    occupancy_obj["Fraction of Times with more than 10 people around"] = str(int(df[df['occupancy'] > 10].shape[0]/df.shape[0]*100)) + "%"
+
+    return render_template('plot.html', graphJSON=graphJSON, title="Occupancy Data", device_id=device_id, temp_obj=occupancy_obj, dates=str(int((datetime.datetime.now() - max(df['Datetime'])).total_seconds()//60)))
 
 @app.route('/get_data', methods=['POST'])
 def send_info():
     data_type = request.form['data_type']
+    device_id = request.form['id']
     if data_type == 'Temperature Data':
         conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
         c = conn.cursor()  # move cursor into database (allows us to execute commands)
-        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
-        df = pd.read_sql_query("SELECT timing, t FROM rht_table ORDER BY rowid DESC;", conn)
-        df.rename(columns={'timing': 'Datetime'}, inplace=True)
-        df.to_csv('temperature.csv')
+        c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real, device_id varchar(300));''')
+        df = pd.read_sql_query("SELECT time, temp, surface FROM test_rht_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+        df.rename(columns={'time': 'Datetime'}, inplace=True)
+        df.to_csv('temperature.csv', index=False)
         return send_file('temperature.csv')
-    elif data_type == 'Humidity Data':
+    elif data_type == 'Relative Humidity Data':
         conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
         c = conn.cursor()  # move cursor into database (allows us to execute commands)
-        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
-        df = pd.read_sql_query("SELECT timing, soc FROM rht_table ORDER BY rowid DESC;", conn)
-        df.rename(columns={'timing': 'Datetime'}, inplace=True)
-        df.to_csv('humidity.csv')
+        c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real, device_id varchar(300));''')
+        df = pd.read_sql_query("SELECT time, humidity FROM test_rht_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+        df.rename(columns={'time': 'Datetime'}, inplace=True)
+        df.to_csv('humidity.csv', index=False)
         return send_file('humidity.csv')
-    elif data_type == 'Soc Data':
+    elif data_type == 'Sunlight Lux Data':
         conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
         c = conn.cursor()  # move cursor into database (allows us to execute commands)
-        c.execute('''CREATE TABLE IF NOT EXISTS rht_table (timing timestamp, rh real,t real, heat_index real, soc real);''')
-        df = pd.read_sql_query("SELECT timing, rh FROM rht_table ORDER BY rowid DESC;", conn)
-        df.rename(columns={'timing': 'Datetime'}, inplace=True)
-        df.to_csv('soc.csv')
+        c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real, device_id varchar(300));''')
+        df = pd.read_sql_query("SELECT time, lux FROM test_lux_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+        df.rename(columns={'time': 'Datetime'}, inplace=True)
+        df.to_csv('soc.csv', index=False)
         return send_file('soc.csv')
+    elif data_type == 'Occupancy Data':
+        conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
+        c = conn.cursor()  # move cursor into database (allows us to execute commands)
+        c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real, device_id varchar(300));''')
+        df = pd.read_sql_query("SELECT time, occupancy FROM test_occupancy_table2 WHERE device_id = ? ORDER BY rowid DESC;", conn, params=(device_id,))
+        df.rename(columns={'time': 'Datetime'}, inplace=True)
+        df.to_csv('occupancy.csv', index=False)
+        return send_file('occupancy.csv')
     else:
         return "Oops, csv file does not exist"
     
 
 @app.route('/profile')
 def profile():
+    if "logged_in" not in session:
+        return redirect('login')
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS device_test (id real, name text);''') 
-    prev_data = c.execute('''SELECT id, name FROM device_test ORDER BY rowid DESC;''').fetchall()
+    c.execute('''CREATE TABLE IF NOT EXISTS device_test2 (id real, name text, user text);''') 
+    prev_data = c.execute('''SELECT id, name FROM device_test2 WHERE user = ? ORDER BY rowid DESC ;''', (session["logged_in"],)).fetchall()
     conn.close()
     devices = [{'id': int(data[0]), 'name': data[1]} for data in prev_data]
-    return render_template('profile.html', devices=devices)
+    return render_template('profile.html', devices=devices, user=session["logged_in"])
 
 @app.route('/change_name', methods=['POST'])
 def change_device_name():
     device_id = float(request.args['device_id'])
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''UPDATE device_test SET name = ? WHERE id = ?;''', (request.form["device_name"], device_id,)) 
+    c.execute('''UPDATE device_test2 SET name = ? WHERE (id = ? AND user = ?);''', (request.form["device_name"], device_id,session["logged_in"])) 
     conn.commit()
     conn.close()
     return redirect('/profile')
@@ -214,7 +273,7 @@ def delete_device():
     device_id = float(request.args['device_id'])
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''DELETE FROM device_test WHERE id = ?;''', (device_id,)) 
+    c.execute('''DELETE FROM device_test2 WHERE (id = ? AND user = ?);''', (device_id,session["logged_in"],)) 
     conn.commit()
     conn.close()
     return redirect('/profile')
@@ -225,75 +284,10 @@ def add_device():
     device_id = float(request.form["device_id"])
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''INSERT INTO device_test VALUES (?, ?);''', (device_id, device_name)) 
+    c.execute('''INSERT INTO device_test2 VALUES (?, ?, ?);''', (device_id, device_name, session["logged_in"],)) 
     conn.commit()
     conn.close()
     return redirect('/profile')
-
-
-@app.route("/occupancy", methods=['POST','GET'])
-def occupancy_function():
-    args = request.args
-    if request.method == "POST":
-        try:
-            bytes = str(args['bytes'])
-            device = int(args['device']) if 'device' in args else 0
-            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
-            c = conn.cursor()  # move cursor into database (allows us to execute commands)
-            c.execute('''CREATE TABLE IF NOT EXISTS occupy_table (time timestamp, device real, bytes text);''') 
-            c.execute('''INSERT into occupy_table VALUES (?,?,?);''', (datetime.datetime.now(),device,bytes,))
-            conn.commit()
-            conn.close()
-            return 'posted!'
-        except Exception as e:
-            return str(e)
-    else:
-        try:
-            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
-            c = conn.cursor()  # move cursor into database (allows us to execute commands)
-            c.execute('''CREATE TABLE IF NOT EXISTS occupy_table (time timestamp, device real, bytes text);''') 
-            prev_data = c.execute('''SELECT time, device, bytes FROM occupy_table ORDER BY rowid DESC;''').fetchall()
-
-            outs = ""
-            for t in prev_data:
-                outs += f"time: {t[0]}, device: {t[1]}, bytes: {t[2]}! <br>"
-            return outs
-        except Exception as e:
-            return 'Error: ' +str(e)
-    
-@app.route("/post_test", methods=["POST", "GET"])
-def testing():
-    if request.method == 'POST':
-        json_dict = request.get_json()
-        id = json_dict["id"]
-        temp_arr = json_dict["temp"]
-        humidity_arr = json_dict["humidity"]
-        lux_arr = json_dict["lux"]
-
-        current_time = datetime.datetime.now()
-
-        conn = sqlite3.connect(RHT_DB)  
-        c = conn.cursor()  
-        c.execute('''CREATE TABLE IF NOT EXISTS test_temp_table (time timestamp, temp real, humidity real);''')
-        for i in range(len(temp_arr)):
-            c.execute('''INSERT into test_temp_table VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)) ,temp_arr[i],humidity_arr[i],))
-        conn.commit()
-        conn.close()
-        return datetime.datetime.now().hour
-    else:
-        try:
-            conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
-            c = conn.cursor()  # move cursor into database (allows us to execute commands)
-            c.execute('''CREATE TABLE IF NOT EXISTS test_temp_table (time timestamp, temp real, humidity real);''') 
-            prev_data = c.execute('''SELECT time, temp, humidity FROM test_temp_table ORDER BY rowid DESC;''').fetchall()
-
-            outs = "Existing Test Data: <br>"
-            for t in prev_data:
-                outs += f"time: {t[0]}, temp: {t[1]}, humidity: {t[2]}! <br>"
-            return outs
-        except Exception as e:
-            return 'Error: ' +str(e)
-
 
 @app.route("/posty", methods=["POST", "GET"])
 def alternate_testing():
@@ -308,12 +302,12 @@ def alternate_testing():
 
             conn = sqlite3.connect(RHT_DB)  
             c = conn.cursor()  
-            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table (time timestamp, device real, temp real, humidity real);''')
-            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table (time timestamp, device real, lux real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table (time timestamp, device real, temp real, humidity real, device_id varchar(300));''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table (time timestamp, device real, lux real, device_id varchar(300));''')
             for i in range(len(temp_arr)):
-                c.execute('''INSERT into test_rht_table VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(temp_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)), device_id, temp_arr[i], humidity_arr[i],))
+                c.execute('''INSERT into test_rht_table VALUES (?,?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(temp_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)//len(temp_arr)), 0, temp_arr[i], humidity_arr[i],str(device_id),))
             for i in range(len(lux_arr)):
-                c.execute('''INSERT into test_lux_table VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(lux_arr)), device_id, lux_arr[i]))
+                c.execute('''INSERT into test_lux_table VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)//len(lux_arr)), 0, lux_arr[i], str(device_id),))
             conn.commit()
             conn.close()
             return str(datetime.datetime.now().hour)
@@ -325,8 +319,8 @@ def alternate_testing():
             c = conn.cursor()  # move cursor into database (allows us to execute commands)
             c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table (time timestamp, device real, temp real, humidity real);''') 
             c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table (time timestamp, device real, lux real);''') 
-            prev_temp_data = c.execute('''SELECT time, device, temp, humidity FROM test_rht_table ORDER BY rowid DESC;''').fetchall()
-            prev_lux_data = c.execute('''SELECT time, device, lux FROM test_lux_table ORDER BY rowid DESC;''').fetchall()
+            prev_temp_data = c.execute('''SELECT time, device_id, temp, humidity FROM test_rht_table ORDER BY rowid DESC;''').fetchall()
+            prev_lux_data = c.execute('''SELECT time, device_id, lux FROM test_lux_table ORDER BY rowid DESC;''').fetchall()
             outs = "Existing Temp Data: <br>"
             for t in prev_temp_data:
                 outs += f"time: {t[0]}, device: {t[1]}, temp: {t[2]}, humidity: {t[3]}! <br>"
@@ -353,18 +347,18 @@ def testing2():
             ARR = []
             conn = sqlite3.connect(RHT_DB)  
             c = conn.cursor()  
-            c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real);''')
-            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real);''')
-            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real);''')
-            c.execute('''CREATE TABLE IF NOT EXISTS test_pressure_table2 (time timestamp, device real, pressure real);''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real, device_id varchar(300));''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real, device_id varchar(300));''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real, device_id varchar(300));''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_pressure_table2 (time timestamp, device real, pressure real, device_id varchar(300));''')
             for i in range(len(occupancy_arr)):
-                c.execute('''INSERT into test_occupancy_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(occupancy_arr)), device_id, occupancy_arr[i],))
+                c.execute('''INSERT into test_occupancy_table2 VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(occupancy_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)/len(occupancy_arr)), 0, occupancy_arr[i], str(int(str(device_id).split(':')[-1], 16)),))
             for i in range(len(temp_arr)):
-                c.execute('''INSERT into test_rht_table2 VALUES (?,?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(temp_arr)), device_id, temp_arr[i], humidity_arr[i], surface_arr[i],))
+                c.execute('''INSERT into test_rht_table2 VALUES (?,?,?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(temp_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)/len(temp_arr)), 0, temp_arr[i], humidity_arr[i], surface_arr[i],str(int(str(device_id).split(':')[-1], 16)),))
             for i in range(len(lux_arr)):
-                c.execute('''INSERT into test_lux_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(lux_arr)), device_id, lux_arr[i],))
+                c.execute('''INSERT into test_lux_table2 VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(lux_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)/len(lux_arr)), 0, lux_arr[i],str(int(str(device_id).split(':')[-1], 16)),))
             for i in range(len(pressure_arr)):
-                c.execute('''INSERT into test_pressure_table2 VALUES (?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ) + datetime.timedelta(minutes=(POST_FREQ*i)/len(pressure_arr)), device_id, pressure_arr[i],))
+                c.execute('''INSERT into test_pressure_table2 VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(pressure_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)/len(pressure_arr)), 0, pressure_arr[i],str(int(str(device_id).split(':')[-1], 16)),))
             conn.commit()
             conn.close()
             return str(datetime.datetime.now().hour) + str(', '.join([str(x) for x in ARR]))
@@ -374,14 +368,14 @@ def testing2():
         try:
             conn = sqlite3.connect(RHT_DB)  # connect to that database (will create if it doesn't already exist)
             c = conn.cursor()  # move cursor into database (allows us to execute commands)
-            c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real);''')
-            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real);''')
-            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real);''')
-            c.execute('''CREATE TABLE IF NOT EXISTS test_pressure_table2 (time timestamp, device real, pressure real);''')
-            prev_occupancy_data = c.execute('''SELECT time, device, occupancy FROM test_occupancy_table2 ORDER BY rowid DESC;''').fetchall()
-            prev_temp_data = c.execute('''SELECT time, device, temp, humidity, surface FROM test_rht_table2 ORDER BY rowid DESC;''').fetchall()
-            prev_lux_data = c.execute('''SELECT time, device, lux FROM test_lux_table2 ORDER BY rowid DESC;''').fetchall()
-            prev_pressure_data = c.execute('''SELECT time, device, pressure FROM test_pressure_table2 ORDER BY rowid DESC;''').fetchall()
+            c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real, device_id varchar(300));''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_rht_table2 (time timestamp, device real, temp real, humidity real, surface real, device_id varchar(300));''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_lux_table2 (time timestamp, device real, lux real, device_id varchar(300));''')
+            c.execute('''CREATE TABLE IF NOT EXISTS test_pressure_table2 (time timestamp, device real, pressure real, device_id varchar(300));''')
+            prev_occupancy_data = c.execute('''SELECT time, device_id, occupancy FROM test_occupancy_table2 ORDER BY rowid DESC;''').fetchall()
+            prev_temp_data = c.execute('''SELECT time, device_id, temp, humidity, surface FROM test_rht_table2 ORDER BY rowid DESC;''').fetchall()
+            prev_lux_data = c.execute('''SELECT time, device_id, lux FROM test_lux_table2 ORDER BY rowid DESC;''').fetchall()
+            prev_pressure_data = c.execute('''SELECT time, device_id, pressure FROM test_pressure_table2 ORDER BY rowid DESC;''').fetchall()
             outs = "Existing Occupancy Data: <br>"
             for t in prev_occupancy_data:
                 outs += f"time: {t[0]}, device: {t[1]}, occupancy: {t[2]}! <br>"
@@ -413,6 +407,10 @@ def send_firmware_cellular_json():
 @app.route('/firmware_cellular.bin', methods=['GET'])
 def send_firmware_cellular_binary():
     return send_file('firmware_cellular.bin')
+
+@app.route('/logo.png', methods=['GET'])
+def send_image():
+    return send_file('logo.png')
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')

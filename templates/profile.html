@@ -1,23 +1,20 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="title">Welcome Admin!</h2>
+<h2 class="title">Welcome {{ user }} Admin!</h2>
 
 {% for device in devices %}
     <div class="column is-full-size">
         <div class="box has-text-black">
             <div class="columns">
-                <div class="column is-four-fifths" id="device-{{ device.id }}" style="background-color: rgba(204, 65, 83, 0.582)">
-                    <h1 class="title has-text-black has-text-left">Dashboard for {{ device.name }} (Device ID: {{ device.id }})</h1>
-                </div>
-                <div class="column">
-                    
+                <div class="column is-four-fifths" id="device-{{ device.id }}" style="background-color: rgb(174, 174, 192)">
+                    <h1 class="title has-text-black has-text-left">Device At {{ device.name }} (Device ID: {{ device.id }})</h1>
                 </div>
                 <div class="column">
                     <center><button class="button is-block is-info is-large" onclick="openForm(event, {{ device.id }})" data-target="#form-{{ device.id }}">Edit</button></center>
                     <div class="form-popup" id="form-{{ device.id }}">
                         <form action="{{url_for('change_device_name', device_id=device.id)}}" class="form-container" method="POST">
-                            <label for="Task_edit"><b>Edit Name</b></label>
+                            <label for="Task_edit"><b>Edit Location</b></label>
                             <input type="text" value="{{ device.name }}" name="device_name" required>
                             <button type="submit" class="button">Edit</button>
                             <button type="button" class="button" onclick="closeForm(event, {{ device.id }})" data-dismiss=".form-popup">Close</button>
@@ -26,37 +23,49 @@
                 </div>
                 <div class="column">
                     <form method="POST" action="{{url_for('delete_device', device_id=device.id)}}">
-                        <button class="button is-block is-info is-large">Delete</button>
+                        <button class="button is-block is-danger is-large">Delete</button>
                     </form>
                 </div>
             </div>
         <br>
-
+        {% if user == "MIT" %}
+            <img src="https://maps.googleapis.com/maps/api/staticmap?markers={{ device.name }},Cambridge,MA&zoom=16&size=1200x400&key=YOUR_KEY">
+        {% else %}
+            <img src="https://maps.googleapis.com/maps/api/staticmap?markers={{ device.name }},MiamiDadeCounty,Florida&zoom=16&size=1200x400&key=YOUR_KEY">
+        {% endif %}
+        <br>
+        <br>
         <div class="columns">
             <div class="column coolhover">
-                <center>
-                    Temperature
-                </center>
-            </div>
+                <a href="/temp_plot?id={{ device.id }}">
+                    <center>
+                        Temperature
+                    </center>
+                </a>                
+            </div>         
+
             <div class="column coolhover">
-                <center>
-                    Humidity
-                </center>
+                <a href="/humidity_plot?id={{ device.id }}">
+                    <center>
+                        Humidity
+                    </center>
+                </a>                
             </div>
+
             <div class="column coolhover">
-                <center>
-                    Pressure
-                </center>
+                <a href="/lux_plot?id={{ device.id }}">
+                    <center>
+                        Lux
+                    </center>
+                </a>                
             </div>
+
             <div class="column coolhover">
-                <center>
-                    Occupancy
-                </center>
-            </div>
-            <div class="column coolhover">
-                <center>
-                    Battery Status
-                </center>
+                <a href="/occupancy_plot?id={{ device.id }}">
+                    <center>
+                        Occupancy
+                    </center>
+                </a>                
             </div>
 
         </div>
@@ -82,7 +91,7 @@
         
                     <div class="field">
                         <div class="control">
-                            <input class="input is-large" type="username" name="device_name" placeholder="Device Name">
+                            <input class="input is-large" type="username" name="device_name" placeholder="Device Location">
                         </div>
                     </div>
                     <button type="submit" class="button">Add</button>

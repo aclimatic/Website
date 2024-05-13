@@ -1,21 +1,32 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1><p class="is-size-2">{{ title }}</h1>
+
+<center>
+  <div class="column is-half">
+    <div class="box has-text-black">
+      <a class="button is-link is-outlined" href="/profile"> Go Back </a>
+      <a class="button is-link is-outlined" href="/temp_plot?id={{ device_id }}"> Temperature </a>
+      <a class="button is-link is-outlined" href="/humidity_plot?id={{ device_id }}"> Humidity </a>
+      <a class="button is-link is-outlined" href="/lux_plot?id={{ device_id }}"> Lux </a>
+      <a class="button is-link is-outlined" href="/occupancy_plot?id={{ device_id }}"> Occupancy </a>
+    </div>
+  </div>
+</center>
+
 <div class="column is-full-size">
   <div class="box has-text-black">
-    <h1 class="title has-text-black">Dashboard for {{ dates }}</h1>
-    <div class="columns">
+    <h1 class="title has-text-black">{{ title }} (Last recorded {{ dates }} minutes ago)</h1>
+    <div class="grid-container">
       {% for dict_item in temp_obj %}
-        
-      <div class="column">
-        <div class="coolhover">
-          <center>
-            <h1><b>{{ dict_item }}</b></h1>
-            {{ temp_obj[dict_item] }}
-          </center>
+        <div class="grid-item">
+          <div class="coolhover">
+            <center>
+              <h1><b>{{ dict_item }}</b></h1>
+              {{ temp_obj[dict_item] }}
+            </center>
+          </div>
         </div>
-      </div>
       {% endfor %}
     </div>
   </div>
@@ -31,6 +42,7 @@
 <div class="column">
 <form method="POST" action="/get_data">
   <input type="hidden" value="{{ title }}" name="data_type">
+  <input type="hidden" value="{{ device_id }}" name="id">
   <center><button class="button is-block is-size-5">Download Data!</button></center>
 </form>
 </div>
