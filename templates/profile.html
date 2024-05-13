@@ -29,9 +29,9 @@
             </div>
         <br>
         {% if user == "MIT" %}
-            <img src="https://maps.googleapis.com/maps/api/staticmap?markers={{ device.name }},Cambridge,MA&zoom=16&size=1200x400&key=YOUR_KEY">
+            <img src="https://maps.googleapis.com/maps/api/staticmap?markers={{ device.name }},Cambridge,MA&zoom=16&size=1200x400&key={{API_KEY}}">
         {% else %}
-            <img src="https://maps.googleapis.com/maps/api/staticmap?markers={{ device.name }},MiamiDadeCounty,Florida&zoom=16&size=1200x400&key=YOUR_KEY">
+            <img src="https://maps.googleapis.com/maps/api/staticmap?markers={{ device.name }},MiamiDadeCounty,Florida&zoom=16&size=1200x400&key={{API_KEY}}">
         {% endif %}
         <br>
         <br>
@@ -67,8 +67,11 @@
                     </center>
                 </a>                
             </div>
-
         </div>
+        
+        {% if device.tilted == 'true' %}
+            <div class="has-text-danger"> This device was detected to have moved in the last hour. Please take a look. </div>
+        {% endif %}
         </div>
     </div>
 {% endfor %}

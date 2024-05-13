@@ -13,6 +13,8 @@ from werkzeug.debug import DebuggedApplication #bring in debugging library
 # SERVER CODE!
 POST_FREQ = 60
 RHT_DB = "server_db_4.db"
+
+GOOGLE_MAPS_API = 'YOUR API KEY HERE'
     
 app = Flask(__name__)
 app.secret_key = "69001231gaurabd"
@@ -76,12 +78,12 @@ def plotter2():
     # turn into json object for export and embedding in template:
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
-    latest_humidity = min(df[df['Datetime'] == max(df['Datetime'])]['humidity'])
+    latest_humidity = round(min(df[df['Datetime'] == max(df['Datetime'])]['humidity']), 2)
     latest_temp = min(df[df['Datetime'] == max(df['Datetime'])]['temp'])
     humidity_obj = dict()
     humidity_obj["Current Humidity (in %)"] = latest_humidity
-    humidity_obj["Minimum Humidity today (in %)"] = min(df['humidity'])
-    humidity_obj["Maximum Humidity today (in %)"] = max(df['humidity'])
+    humidity_obj["Minimum Humidity today (in %)"] = round(min(df['humidity']), 2)
+    humidity_obj["Maximum Humidity today (in %)"] = round(max(df['humidity']), 2)
     humidity_obj["Current Heat Index"] = compute_heat_index(latest_humidity, latest_temp)
     return render_template('plot.html', graphJSON=graphJSON, title="Relative Humidity Data", device_id=device_id, temp_obj=humidity_obj, dates=str(int((datetime.datetime.now() - max(df['Datetime'])).total_seconds()//60)))
 
@@ -118,13 +120,13 @@ def plotter1():
 
         current_date = datetime.datetime.now().date()
         df_curr_day = df[df['Datetime'].dt.date == current_date]
-        temp_obj["Current Air Temperature (in F)"] = min(df[df['Datetime'] == max(df['Datetime'])]['temp'])
+        temp_obj["Current Air Temperature (in F)"] = round(min(df[df['Datetime'] == max(df['Datetime'])]['temp']), 2)
 
         if (surface_df.shape[0] != 0):
-            temp_obj["Current Surface Temperature (in F)"] = min(df[df['Datetime'] == max(df['Datetime'])]['surface'])
+            temp_obj["Current Surface Temperature (in F)"] = round(min(df[df['Datetime'] == max(df['Datetime'])]['surface']), 2)
         if df_curr_day.shape[0] != 0:
-            temp_obj["Minimum Temperature Reported Today (in F)"] = min(df_curr_day['temp'])
-            temp_obj["Maximum Temperature Reported Today (in F)"] = max(df_curr_day['temp'])
+            temp_obj["Minimum Temperature Reported Today (in F)"] = round(min(df_curr_day['temp']), 2)
+            temp_obj["Maximum Temperature Reported Today (in F)"] = round(max(df_curr_day['temp']), 2)
         else:
             temp_obj["Minimum Temperature Reported Today (in F)"] = '-'
             temp_obj["Maximum Temperature Reported Today (in F)"] = '-'
@@ -166,8 +168,8 @@ def lux_plotter():
     except:
         highest_lux_datetime = '-'
     lux_obj = dict()
-    lux_obj["Current Lux Reading"] = min(df[df['Datetime'] == max(df['Datetime'])]['lux'])
-    lux_obj["Time of Maximum Sunlight today"] = str(highest_lux_datetime.hour) + ':' + str(highest_lux_datetime.minute) if highest_lux_datetime != '-' else '-'
+    lux_obj["Current Lux Reading"] = round(min(df[df['Datetime'] == max(df['Datetime'])]['lux']), 2)
+    lux_obj["Time of Maximum Sunlight today"] = str(highest_lux_datetime.hour).zfill(2) + ':' + str(highest_lux_datetime.minute).zfill(2) if highest_lux_datetime != '-' else '-'
 
     return render_template('plot.html', graphJSON=graphJSON, title="Sunlight Lux Data", temp_obj=lux_obj, device_id=device_id, dates=str(int((datetime.datetime.now() - max(df['Datetime'])).total_seconds()//60)))
 
@@ -200,7 +202,7 @@ def occupancy_plotter():
         highest_occupancy_datetime = '-'
     occupancy_obj = dict()
     occupancy_obj["Current Number of People"] = str(int(min(df[df['Datetime'] == max(df['Datetime'])]['occupancy'])))
-    occupancy_obj["Time of Highest Occupancy today"] = str(highest_occupancy_datetime.hour) + ':' + str(highest_occupancy_datetime.minute) if highest_occupancy_datetime != '-' else '-'
+    occupancy_obj["Time of Highest Occupancy today"] = str(highest_occupancy_datetime.hour).zfill(2) + ':' + str(highest_occupancy_datetime.minute).zfill(2) if highest_occupancy_datetime != '-' else '-'
     occupancy_obj["Number of People during Highest Occupancy"] = str(int(min(df[df['Datetime'] == highest_occupancy_datetime]['occupancy']))) if highest_occupancy_datetime != '-' else '-'
     occupancy_obj["Fraction of Times with more than 10 people around"] = str(int(df[df['occupancy'] > 10].shape[0]/df.shape[0]*100)) + "%"
 
@@ -252,18 +254,18 @@ def profile():
         return redirect('login')
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS device_test2 (id real, name text, user text);''') 
-    prev_data = c.execute('''SELECT id, name FROM device_test2 WHERE user = ? ORDER BY rowid DESC ;''', (session["logged_in"],)).fetchall()
+    c.execute('''CREATE TABLE IF NOT EXISTS device_test3 (id real, name text, user text, tilted text);''') 
+    prev_data = c.execute('''SELECT id, name, tilted FROM device_test3 WHERE user = ? ORDER BY rowid DESC ;''', (session["logged_in"],)).fetchall()
     conn.close()
-    devices = [{'id': int(data[0]), 'name': data[1]} for data in prev_data]
-    return render_template('profile.html', devices=devices, user=session["logged_in"])
+    devices = [{'id': int(data[0]), 'name': data[1], 'tilted': data[2]} for data in prev_data]
+    return render_template('profile.html', devices=devices, user=session["logged_in"], API_KEY=GOOGLE_MAPS_API)
 
 @app.route('/change_name', methods=['POST'])
 def change_device_name():
     device_id = float(request.args['device_id'])
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''UPDATE device_test2 SET name = ? WHERE (id = ? AND user = ?);''', (request.form["device_name"], device_id,session["logged_in"])) 
+    c.execute('''UPDATE device_test3 SET name = ? WHERE (id = ? AND user = ?);''', (request.form["device_name"], device_id,session["logged_in"])) 
     conn.commit()
     conn.close()
     return redirect('/profile')
@@ -273,7 +275,7 @@ def delete_device():
     device_id = float(request.args['device_id'])
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''DELETE FROM device_test2 WHERE (id = ? AND user = ?);''', (device_id,session["logged_in"],)) 
+    c.execute('''DELETE FROM device_test3 WHERE (id = ? AND user = ?);''', (device_id,session["logged_in"],)) 
     conn.commit()
     conn.close()
     return redirect('/profile')
@@ -284,7 +286,7 @@ def add_device():
     device_id = float(request.form["device_id"])
     conn = sqlite3.connect(RHT_DB) 
     c = conn.cursor()
-    c.execute('''INSERT INTO device_test2 VALUES (?, ?, ?);''', (device_id, device_name, session["logged_in"],)) 
+    c.execute('''INSERT INTO device_test3 VALUES (?, ?, ?, ?);''', (device_id, device_name, session["logged_in"], 'false')) 
     conn.commit()
     conn.close()
     return redirect('/profile')
@@ -335,6 +337,7 @@ def alternate_testing():
 def testing2():
     if request.method == 'POST':
         try:
+            current_time = datetime.datetime.now()
             json_dict = request.get_json()
             device_id = json_dict["id"]
             temp_arr = json_dict["temp"]
@@ -343,8 +346,15 @@ def testing2():
             occupancy_arr = json_dict["occupancy"]
             pressure_arr = json_dict["pressure"]
             surface_arr = json_dict["surface"]
-            current_time = datetime.datetime.now()
-            ARR = []
+            try:
+                tilt_info = int(json_dict["isTilted"])
+                tilted = 'true' if (tilt_info == 1) else 'false'
+                c = conn.cursor()
+                c.execute('''UPDATE device_test3 SET tilted = ? WHERE id = ?;''', (tilted, int(device_id),)) 
+                conn.commit()
+                conn.close()
+            except:
+                pass
             conn = sqlite3.connect(RHT_DB)  
             c = conn.cursor()  
             c.execute('''CREATE TABLE IF NOT EXISTS test_occupancy_table2 (time timestamp, device real, occupancy real, device_id varchar(300));''')
@@ -361,7 +371,7 @@ def testing2():
                 c.execute('''INSERT into test_pressure_table2 VALUES (?,?,?,?);''', (current_time - datetime.timedelta(minutes=POST_FREQ - POST_FREQ*1//len(pressure_arr)) + datetime.timedelta(minutes=(POST_FREQ*i)/len(pressure_arr)), 0, pressure_arr[i],str(int(str(device_id).split(':')[-1], 16)),))
             conn.commit()
             conn.close()
-            return str(datetime.datetime.now().hour) + str(', '.join([str(x) for x in ARR]))
+            return str(datetime.datetime.now().hour)
         except Exception as error:
             return error
     else:
