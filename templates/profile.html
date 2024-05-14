@@ -34,6 +34,9 @@
             <img src="https://maps.googleapis.com/maps/api/staticmap?markers={{ device.name }},MiamiDadeCounty,Florida&zoom=16&size=1200x400&key={{API_KEY}}">
         {% endif %}
         <br>
+        {% if device.arrival %}
+            <center><div class="notification is-primary" style="width: 30%;"> {{ device.arrival }} </div></center>
+        {% endif %}
         <br>
         <div class="columns">
             <div class="column coolhover">

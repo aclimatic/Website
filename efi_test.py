@@ -14,7 +14,7 @@ from werkzeug.debug import DebuggedApplication #bring in debugging library
 POST_FREQ = 60
 RHT_DB = "server_db_4.db"
 
-GOOGLE_MAPS_API = 'YOUR API KEY HERE'
+GOOGLE_MAPS_API = 'AIzaSyAN7H9v-qOpWw2yscOovxJ8j89WQq8pE9E'
     
 app = Flask(__name__)
 app.secret_key = "69001231gaurabd"
@@ -36,6 +36,22 @@ def get_temperature_api(latitude, longitude):
         return float(data['current']['temperature_2m'])
     else:
         return 'None'
+
+def get_stop_time(stop_name):
+    df = pd.read_csv('stops.txt')
+    stop_id = df[df["stop_name"] == stop_name]['stop_id']
+    if len(stop_id) == 0:
+        return 'None'
+    else:
+        try:
+            URL = f'https://www.miamidade.gov/transit/WebServices/BusTracker/?RouteID=&Dir=&StopID={str(min(stop_id))}&Sequence='
+            response_text = requests.get(url=URL).text
+            arrival_time = response_text.split('<Time1>')[1].split('</Time1>')[0]
+            if arrival_time[-2:] == ' *':
+                arrival_time = arrival_time[:-2]
+            return "Next bus arrives in " + arrival_time + "."
+        except:
+            return 'None'
 
 @app.route("/")
 def index():
@@ -258,6 +274,14 @@ def profile():
     prev_data = c.execute('''SELECT id, name, tilted FROM device_test3 WHERE user = ? ORDER BY rowid DESC ;''', (session["logged_in"],)).fetchall()
     conn.close()
     devices = [{'id': int(data[0]), 'name': data[1], 'tilted': data[2]} for data in prev_data]
+
+    if (session["logged_in"] == 'Miami'):
+        for device in devices:
+            stop_time = get_stop_time(device['name'])
+            print(stop_time)
+            if stop_time != 'None':
+                device["arrival"] = stop_time
+
     return render_template('profile.html', devices=devices, user=session["logged_in"], API_KEY=GOOGLE_MAPS_API)
 
 @app.route('/change_name', methods=['POST'])
