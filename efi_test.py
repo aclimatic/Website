@@ -14,7 +14,7 @@ from werkzeug.debug import DebuggedApplication #bring in debugging library
 POST_FREQ = 60
 RHT_DB = "server_db_4.db"
 
-GOOGLE_MAPS_API = 'AIzaSyAN7H9v-qOpWw2yscOovxJ8j89WQq8pE9E'
+GOOGLE_MAPS_API = 'FIX ME'
     
 app = Flask(__name__)
 app.secret_key = "69001231gaurabd"
